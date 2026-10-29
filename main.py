@@ -13,7 +13,17 @@ def save_calculation(a, b, op, result):
             (a, b, op, result),
         )
 
-
+@app.get("/history")
+def history():
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        rows = conn.execute(
+            "SELECT id, a, b, op, result, created_at FROM calculations ORDER BY id DESC LIMIT 50"
+        ).fetchall()
+    return [
+        {"id": r[0], "a": r[1], "b": r[2], "op": r[3], "result": r[4], "created_at": str(r[5])}
+        for r in rows
+    ]
+    
 @app.get("/calculate")
 def calculate(a: int, b: int, op: str):
     if op == "+":
