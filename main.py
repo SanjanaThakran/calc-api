@@ -1,6 +1,18 @@
+import os
+
+import psycopg
 from fastapi import FastAPI
 
 app = FastAPI()
+
+
+def save_calculation(a, b, op, result):
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO calculations (a, b, op, result) VALUES (%s, %s, %s, %s)",
+            (a, b, op, result),
+        )
+
 
 @app.get("/calculate")
 def calculate(a: int, b: int, op: str):
@@ -16,4 +28,6 @@ def calculate(a: int, b: int, op: str):
         result = a / b
     else:
         return {"error": "unknown operator"}
+
+    save_calculation(a, b, op, result)
     return {"result": result}
