@@ -1,11 +1,12 @@
 import os
-import psycopg
-from fastapi import FastAPI, Header
-from fastapi.middleware.cors import CORSMiddleware
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+
 import jwt
+import psycopg
+from fastapi import FastAPI, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -16,53 +17,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-async def save_calculation(a, b, op, result):
-    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
-        await conn.execute(
-            "INSERT INTO calculations (a, b, op, result) VALUES (%s, %s, %s, %s)",
-            (a, b, op, result),
-        )
-
-
-@app.get("/calculate")
-async def calculate(a: int, b: int, op: str, authorization: str = Header(...)):
-    # the token comes in as "Bearer <token>", so remove the word "Bearer "
-    token = authorization.replace("Bearer ", "")
-    try:
-        jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except jwt.InvalidTokenError:
-        return {"error": "please log in first"}
-
-    if op == "+":
-        result = a + b
-    elif op == "-":
-        result = a - b
-    elif op == "*":
-        result = a * b
-    elif op == "/":
-        if b == 0:
-            return {"error": "cannot divide by zero"}
-        result = a / b
-    else:
-        return {"error": "unknown operator"}
-
-    await save_calculation(a, b, op, result)
-    return {"result": result}
-
-
-@app.get("/history")
-async def history():
-    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
-        cur = await conn.execute(
-            "SELECT id, a, b, op, result, created_at FROM calculations ORDER BY id DESC LIMIT 50"
-        )
-        rows = await cur.fetchall()
-    return [
-        {"id": r[0], "a": r[1], "b": r[2], "op": r[3], "result": r[4], "created_at": str(r[5])}
-        for r in rows
-    ]
 
 JWT_SECRET = os.environ["JWT_SECRET"]
 
@@ -115,3 +69,61 @@ async def login(user: UserIn):
         algorithm="HS256",
     )
     return {"token": token}
+
+
+async def save_calculation(a, b, op, result, username):
+    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
+        await conn.execute(
+            "INSERT INTO calculations (a, b, op, result, username) VALUES (%s, %s, %s, %s, %s)",
+            (a, b, op, result, username),
+        )
+
+
+@app.get("/calculate")
+async def calculate(a: int, b: int, op: str, authorization: str = Header(...)):
+    # the token comes in as "Bearer <token>", so remove the word "Bearer "
+    token = authorization.replace("Bearer ", "")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return {"error": "please log in first"}
+
+    # the token holds the username of whoever logged in
+    username = payload["username"]
+
+    if op == "+":
+        result = a + b
+    elif op == "-":
+        result = a - b
+    elif op == "*":
+        result = a * b
+    elif op == "/":
+        if b == 0:
+            return {"error": "cannot divide by zero"}
+        result = a / b
+    else:
+        return {"error": "unknown operator"}
+
+    await save_calculation(a, b, op, result, username)
+    return {"result": result}
+
+
+@app.get("/history")
+async def history():
+    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
+        cur = await conn.execute(
+            "SELECT id, a, b, op, result, created_at, username FROM calculations ORDER BY id DESC LIMIT 50"
+        )
+        rows = await cur.fetchall()
+    return [
+        {
+            "id": r[0],
+            "a": r[1],
+            "b": r[2],
+            "op": r[3],
+            "result": r[4],
+            "created_at": str(r[5]),
+            "username": r[6],
+        }
+        for r in rows
+    ]
