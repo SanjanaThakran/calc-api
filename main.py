@@ -1,6 +1,6 @@
 import os
 import psycopg
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 import hashlib
 import secrets
@@ -27,7 +27,14 @@ async def save_calculation(a, b, op, result):
 
 
 @app.get("/calculate")
-async def calculate(a: int, b: int, op: str):
+async def calculate(a: int, b: int, op: str, authorization: str = Header(...)):
+    # the token comes in as "Bearer <token>", so remove the word "Bearer "
+    token = authorization.replace("Bearer ", "")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        return {"error": "please log in first"}
+
     if op == "+":
         result = a + b
     elif op == "-":
