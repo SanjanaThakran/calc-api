@@ -1,8 +1,12 @@
 import os
-
 import psycopg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+import jwt
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -52,3 +56,55 @@ async def history():
         {"id": r[0], "a": r[1], "b": r[2], "op": r[3], "result": r[4], "created_at": str(r[5])}
         for r in rows
     ]
+
+JWT_SECRET = os.environ["JWT_SECRET"]
+
+
+class UserIn(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/register")
+async def register(user: UserIn):
+    # make a random salt and mix it with the password before hashing
+    salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((salt + user.password).encode()).hexdigest()
+    saved = salt + "$" + hashed
+
+    try:
+        async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
+            await conn.execute(
+                "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
+                (user.username, saved),
+            )
+    except psycopg.errors.UniqueViolation:
+        return {"error": "username already taken"}
+
+    return {"message": "user created"}
+
+
+@app.post("/login")
+async def login(user: UserIn):
+    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as conn:
+        cur = await conn.execute(
+            "SELECT password_hash FROM users WHERE username = %s", (user.username,)
+        )
+        row = await cur.fetchone()
+
+    if row is None:
+        return {"error": "wrong username or password"}
+
+    # the saved value looks like "salt$hash", so split it apart
+    salt, saved_hash = row[0].split("$")
+    hashed = hashlib.sha256((salt + user.password).encode()).hexdigest()
+
+    if hashed != saved_hash:
+        return {"error": "wrong username or password"}
+
+    token = jwt.encode(
+        {"username": user.username, "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+    return {"token": token}
