@@ -2,11 +2,11 @@ import os
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-
 import jwt
 import psycopg
-from fastapi import FastAPI, Header
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 JWT_SECRET = os.environ["JWT_SECRET"]
+security = HTTPBearer()
 
 
 class UserIn(BaseModel):
@@ -80,15 +81,18 @@ async def save_calculation(a, b, op, result, username):
 
 
 @app.get("/calculate")
-async def calculate(a: int, b: int, op: str, authorization: str = Header(...)):
-    # the token comes in as "Bearer <token>", so remove the word "Bearer "
-    token = authorization.replace("Bearer ", "")
+async def calculate(
+    a: int,
+    b: int,
+    op: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    token = credentials.credentials
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except jwt.InvalidTokenError:
         return {"error": "please log in first"}
 
-    # the token holds the username of whoever logged in
     username = payload["username"]
 
     if op == "+":
