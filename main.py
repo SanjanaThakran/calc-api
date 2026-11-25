@@ -8,6 +8,10 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
+import json
+import hmac
+import hashlib
+from fastapi import Request, HTTPException
 
 app = FastAPI()
 
@@ -194,3 +198,18 @@ async def refund_payment(payment_id: str):
         "amount_rupees": data["amount"] / 100,
         "status": data["status"],
     }
+
+RAZORPAY_WEBHOOK_SECRET = os.environ["RAZORPAY_WEBHOOK_SECRET"]
+
+@app.post("/webhooks/razorpay")
+async def razorpay_webhook(request: Request):
+    body = await request.body()
+    received_sig = request.headers.get("X-Razorpay-Signature", "")
+    expected_sig = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode(), body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, received_sig):
+        raise HTTPException(status_code=400, detail="Bad signature")
+    event = json.loads(body)
+    print("Razorpay event:", event.get("event"))
+    return {"ok": True}
