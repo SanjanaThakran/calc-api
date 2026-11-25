@@ -175,3 +175,22 @@ async def payment_status(payment_id: str):
         "order_id": data.get("order_id"),
         "method": data.get("method"),
     }
+
+
+@app.post("/payments/{payment_id}/refund")
+async def refund_payment(payment_id: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"https://api.razorpay.com/v1/payments/{payment_id}/refund",
+            auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+            json={},
+        )
+    data = response.json()
+    if response.status_code != 200:
+        return {"error": data}
+    return {
+        "refund_id": data["id"],
+        "payment_id": data["payment_id"],
+        "amount_rupees": data["amount"] / 100,
+        "status": data["status"],
+    }
