@@ -183,7 +183,7 @@ async def refund_payment(payment_id: str):
         response = await client.post(
             f"https://api.razorpay.com/v1/payments/{payment_id}/refund",
             auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
-            json={},
+                        json={"amount": 1000},
         )
     data = response.json()
     if response.status_code != 200:
