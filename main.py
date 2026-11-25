@@ -157,3 +157,21 @@ async def create_payment(order: OrderIn):
     if response.status_code != 200:
         return {"error": data}
     return {"order_id": data["id"], "key_id": RAZORPAY_KEY_ID, "amount": amount_paise}
+
+@app.get("/payments/{payment_id}/status")
+async def payment_status(payment_id: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://api.razorpay.com/v1/payments/{payment_id}",
+            auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+        )
+    data = response.json()
+    if response.status_code != 200:
+        return {"error": data}
+    return {
+        "payment_id": data["id"],
+        "status": data["status"],
+        "amount_rupees": data["amount"] / 100,
+        "order_id": data.get("order_id"),
+        "method": data.get("method"),
+    }
