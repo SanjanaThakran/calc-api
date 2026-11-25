@@ -131,3 +131,29 @@ async def history():
         }
         for r in rows
     ]
+import httpx
+
+RAZORPAY_KEY_ID = os.environ["RAZORPAY_KEY_ID"]
+RAZORPAY_KEY_SECRET = os.environ["RAZORPAY_KEY_SECRET"]
+
+class OrderIn(BaseModel):
+    amount_rupees: int
+    product: str
+
+@app.post("/payments/create")
+async def create_payment(order: OrderIn):
+    amount_paise = order.amount_rupees * 100
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+            json={
+                "amount": amount_paise,
+                "currency": "INR",
+                "notes": {"product": order.product},
+            },
+        )
+    data = response.json()
+    if response.status_code != 200:
+        return {"error": data}
+    return {"order_id": data["id"], "key_id": RAZORPAY_KEY_ID, "amount": amount_paise}
